@@ -27,6 +27,10 @@ Panel {
   property var draftWorkspaces: ({})
   // Whether the layout also says which workspaces belong on which display.
   property bool draftDedicated: false
+  // Dedicated workspaces are kept in the profile but not offered while
+  // Omarchy keeps workspaces per monitor (4.5 and later).
+  readonly property bool perMonitor: service ? service.perMonitor === true : false
+  readonly property bool showDedicated: draftDedicated && !perMonitor
   // Whether the map and the per-display controls are shown.
   property bool arranging: false
   property string selectedKey: ""
@@ -108,7 +112,7 @@ Panel {
 
   function assign(id) {
     // A display that is off or mirrors another has no desktop to put them on.
-    if (confirming || !draftDedicated || !Model.hasDesktop(selected)) return
+    if (confirming || !showDedicated || !Model.hasDesktop(selected)) return
     draftWorkspaces = Model.assignWorkspace(draft, draftWorkspaces, id, selectedKey)
     draftWorkspaces = Model.completeWorkspaces(draft, draftWorkspaces)
     dirty = true
@@ -447,7 +451,7 @@ Panel {
                 required property var modelData
                 readonly property var rect: Model.rectOf(modelData)
                 readonly property bool isSelected: modelData.key === root.selectedKey
-                readonly property var ids: root.draftDedicated ? (root.draftWorkspaces[modelData.key] || []) : []
+                readonly property var ids: root.showDedicated ? (root.draftWorkspaces[modelData.key] || []) : []
 
                 visible: Model.hasDesktop(modelData)
                 readonly property string mirroredBy: {
@@ -619,7 +623,7 @@ Panel {
                       ? displayRow.modelData.name + " · " + displayRow.modelData.width + "×" + displayRow.modelData.height
                         + " · mirrors " + Model.shortName(Model.monitorByKey(root.draft, displayRow.modelData.mirror) || displayRow.modelData)
                       : displayRow.modelData.name + " · " + displayRow.modelData.width + "×" + displayRow.modelData.height
-                        + (root.draftDedicated
+                        + (root.showDedicated
                           ? " · workspaces " + ((root.draftWorkspaces[displayRow.modelData.key] || []).join(" ") || "none")
                           : "")
                     color: root.dim
@@ -787,7 +791,7 @@ Panel {
           }
 
           Button {
-            visible: root.arranging
+            visible: root.arranging && !root.perMonitor
             text: (root.draftDedicated ? "󰄬  " : "󰅖  ") + "Dedicated workspaces"
             leftAlign: true
             width: parent.width
@@ -798,7 +802,7 @@ Panel {
           }
 
           Flow {
-            visible: root.arranging && root.draftDedicated && Model.hasDesktop(root.selected)
+            visible: root.arranging && root.showDedicated && Model.hasDesktop(root.selected)
             width: parent.width
             spacing: Style.space(6)
 

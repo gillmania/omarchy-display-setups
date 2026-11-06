@@ -24,12 +24,15 @@ recognised, so two desks with identical monitors are told apart.
   **Identify** to see which screen is which.
 - **Switch from the bar.** Middle click or scroll on the icon steps through
   the setups saved for what is connected.
-- **Dedicated workspaces, if you want them.** Switch it on for a profile to
-  assign workspaces 1–10 to displays, so each screen keeps its own. Left off,
-  the profile only arranges the displays and your own workspace rules stay in
-  force.
-- **See it in the bar.** Optionally lists the workspaces grouped by display, in
-  place of the built-in workspace switcher.
+- **Send a window to another screen.** On Omarchy 4.5, press `Super + Shift +
+  3` twice quickly to send the focused window to screen 3. See
+  [Omarchy 4.5](#omarchy-45-workspaces-per-screen).
+- **Dedicated workspaces, if you want them** (Omarchy 4.0). Switch it on for a
+  profile to assign workspaces 1–10 to displays, so each screen keeps its own.
+  Left off, the profile only arranges the displays and your own workspace rules
+  stay in force. Omarchy 4.5 gives every screen workspaces of its own.
+- **See it in the bar** (Omarchy 4.0). Optionally lists the workspaces grouped
+  by display, in place of the built-in workspace switcher.
 - **Applied automatically.** A setup is recognised by
   the displays connected to it (make, model, and serial number), not by
   connector names such as `DP-7`, which change every time a dock is replugged.
@@ -134,7 +137,47 @@ the same dock. To make one for another desk, plug in there and save. When you
 plug into a setup that has no profile, your own Hyprland configuration is put
 back in force.
 
-### Workspaces in the bar
+### Omarchy 4.5: workspaces per screen
+
+From Omarchy 4.5 every screen has workspaces 1–10 of its own, and Omarchy
+moves them when a screen comes or goes. The plugin notices this and leaves the
+workspaces to Omarchy:
+
+- Profiles arrange the displays only. A profile saved with dedicated workspaces
+  keeps them in the file, for Omarchy 4.0, but they are not applied, and the
+  panel does not offer them.
+- A display held off is left to Omarchy, which brings its workspaces back when
+  it comes on. A reserved display's workspaces go to the laptop's screen.
+- The workspace list in the bar is not shown; Omarchy's own switcher already
+  shows each screen's workspaces. If you had replaced it, bring it back with
+  `omarchy plugin enable omarchy.workspaces` and
+  `omarchy bar move omarchy.workspaces --after omarchy.menu`.
+- If your own `~/.config/hypr` pins workspaces 1–10 to monitors with
+  `hl.workspace_rule`, remove that too: it fights Omarchy's numbering.
+
+**Send a window to another screen.** The plugin can make `Super + Shift + 1`–`0`
+do two things. One press moves the focused window to that workspace on the same
+screen, as Omarchy does by default. Two presses within 0.4 seconds send it on
+to that screen instead, the number **Identify** shows, onto the workspace it is
+showing, and the first screen goes back to what it showed. Pressed on workspace
+3 itself, `Super + Shift + 3` sends the window to screen 3 at once.
+
+The plugin never changes your keybindings. Add this to
+`~/.config/hypr/bindings.lua`:
+
+```lua
+for n = 1, 10 do
+  local move = o.workspaces.move_window(n)
+  o.rebind("SUPER + SHIFT + code:" .. (n + 9), "Move window to workspace " .. n .. " (twice: to display " .. n .. ")", function()
+    if __display_setups_send_window then __display_setups_send_window(n) else move() end
+  end)
+end
+```
+
+When the plugin is not running, the keys only move to the workspace, as
+Omarchy's own binding does. Remove the lines to get that binding back.
+
+### Workspaces in the bar (Omarchy 4.0)
 
 The widget can also take over from Omarchy's workspace switcher and show which
 display each workspace belongs to. Neighbouring workspaces on the same display
@@ -159,7 +202,7 @@ omarchy bar set io.github.gillmania.display-setups workspaces false --json
 | Key | Action |
 |---|---|
 | `←` `→` `↑` `↓` | Select the previous or next display |
-| `1`–`9`, `0` | Move workspace 1–10 to the selected display |
+| `1`–`9`, `0` | Move workspace 1–10 to the selected display (Omarchy 4.0, with dedicated workspaces) |
 | `r` | Rotate the selected display |
 | `e` | Turn the selected display on or off |
 | `a` or `Enter` | Apply |
@@ -251,7 +294,9 @@ A profile is applied with `hyprctl eval`, as `hl.monitor(...)` and
 displays. Displays are switched on before any is switched off. These are
 runtime settings: they are not written to any file and are gone after
 `hyprctl reload` or a restart, at which point the service applies the profile
-again.
+again. On Omarchy 4.5 only the `hl.monitor(...)` calls are made, and the
+function behind the double press, `__display_setups_send_window`, is defined
+the same way, again after every reload.
 
 Handing the screens back (no profile for the new setup, the active profile
 deleted, a trial not kept with nothing applied before it, or the plugin being

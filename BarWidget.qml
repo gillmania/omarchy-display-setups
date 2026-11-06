@@ -150,7 +150,9 @@ BarWidget {
 
     Loader {
       id: stripLoader
-      active: root.showWorkspaces
+      // Omarchy 4.5 and later number workspaces per monitor, and their own
+      // switcher shows each monitor's; this one only knows the old numbering.
+      active: root.showWorkspaces && !(root.service && root.service.perMonitor)
       visible: active
       source: Qt.resolvedUrl("WorkspaceStrip.qml")
       onLoaded: {

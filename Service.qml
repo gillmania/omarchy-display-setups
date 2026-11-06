@@ -40,6 +40,9 @@ Item {
   property var workspaces: []
   property var workspaceRules: []
   property var dock: null
+  // Omarchy 4.5 and later keep workspaces 1-10 per monitor themselves; see
+  // Model.js, Per-monitor workspaces. Then profiles set no workspace rules.
+  property bool perMonitor: false
   property string fingerprint: ""
   property string topology: ""
   property string lastError: ""
@@ -74,7 +77,7 @@ Item {
   // Holds set aside because they would leave no screen on.
   readonly property var refusedHolds: activeProfile
     ? Model.heldLayout(activeProfile, monitors, holds).refused
-    : Model.buildHoldsLua(monitors, holds, "", workspaces, workspaceRules).refused
+    : Model.buildHoldsLua(monitors, holds, "", workspaces, workspaceRules, perMonitor).refused
 
   // The hold on the monitor `key`, or null.
   function holdFor(key) {
@@ -83,7 +86,7 @@ Item {
 
   // Connector name per workspace id, for the bar's workspace strip.
   readonly property var workspaceOwners: Model.workspaceOwnerNames(monitors, workspaces, workspaceRules)
-  readonly property bool inSync: Model.matchesLive(activeProfile, monitors, workspaceOwners, workspaces, holds)
+  readonly property bool inSync: Model.matchesLive(activeProfile, monitors, perMonitor ? null : workspaceOwners, workspaces, holds)
 
   // ---- Applying ----
   // "idle" | "running" | "ok" | "failed"
@@ -220,7 +223,8 @@ Item {
     probeProc.start(["bash", "-c",
       "hyprctl -j monitors all; printf '\\n@@\\n'; hyprctl -j workspaces; printf '\\n@@\\n'; hyprctl -j workspacerules; printf '\\n@@\\n'; "
       + "for d in /sys/bus/thunderbolt/devices/*; do [[ -r $d/unique_id ]] || continue; "
-      + "printf '%s\\t%s\\t%s\\n' \"$(cat \"$d/unique_id\")\" \"$(cat \"$d/vendor_name\" 2>/dev/null)\" \"$(cat \"$d/device_name\" 2>/dev/null)\"; done"])
+      + "printf '%s\\t%s\\t%s\\n' \"$(cat \"$d/unique_id\")\" \"$(cat \"$d/vendor_name\" 2>/dev/null)\" \"$(cat \"$d/device_name\" 2>/dev/null)\"; done; "
+      + "printf '\\n@@\\n'; hyprctl eval \"$1\" 2>&1", "_", Model.PER_MONITOR_CHECK])
   }
 
   function handleProbe(text, reason) {
@@ -244,6 +248,7 @@ Item {
     root.workspaces = Model.parseWorkspaces(parts[1])
     root.workspaceRules = Model.parseWorkspaceRules(parts[2])
     root.dock = nextDock
+    root.perMonitor = String(parts[4] || "").indexOf(Model.PER_MONITOR_MARK) !== -1
     root.fingerprint = Model.fingerprint(nextMonitors)
     root.topology = Model.topology(nextMonitors, nextDock)
     root.ready = true
@@ -278,6 +283,8 @@ Item {
     // Last, so that listeners see a complete reading and a settled
     // confirmation state.
     root.generation += 1
+
+    if (root.perMonitor) Quickshell.execDetached(["hyprctl", "eval", Model.buildSendLua(root.monitors, root.holds)])
 
     var due = reason === "startup" || reason === "reload" || interrupted
       || (reason === "hotplug" && root.topology !== root.reconciledTopology)
@@ -343,8 +350,8 @@ Item {
     // Kind "holds" has no layout: only the held displays are touched, on top
     // of the user's own configuration.
     var built = kind === "holds"
-      ? Model.buildHoldsLua(root.monitors, root.holds, root.owner, root.workspaces, root.workspaceRules)
-      : Model.buildApplyLua(layout, root.monitors, root.owner, root.holds, root.workspaces, root.workspaceRules)
+      ? Model.buildHoldsLua(root.monitors, root.holds, root.owner, root.workspaces, root.workspaceRules, root.perMonitor)
+      : Model.buildApplyLua(layout, root.monitors, root.owner, root.holds, root.workspaces, root.workspaceRules, root.perMonitor)
     if (built.lua === "") {
       if (kind === "holds") return false
       root.applyState = "failed"
@@ -569,7 +576,7 @@ Item {
     // accepted and then set aside every time a layout goes in.
     var refused = root.activeProfile
       ? Model.heldLayout(root.activeProfile, root.monitors, result.holds).refused
-      : Model.buildHoldsLua(root.monitors, result.holds, "", root.workspaces, root.workspaceRules).refused
+      : Model.buildHoldsLua(root.monitors, result.holds, "", root.workspaces, root.workspaceRules, root.perMonitor).refused
     for (var i = 0; i < refused.length; i++)
       if (refused[i].display === String(display).trim()) return "It would leave no screen on."
     commitHolds(result.holds)
@@ -679,6 +686,7 @@ Item {
       confirmPending: root.confirmPending,
       confirmArmed: root.confirmArmed,
       dedicated: root.activeProfile ? root.activeProfile.dedicated !== false : null,
+      perMonitor: root.perMonitor,
       confirmSeconds: root.confirmSeconds,
       storeWriteError: root.storeWriteError,
       storeState: root.storeState,
