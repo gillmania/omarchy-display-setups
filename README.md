@@ -14,6 +14,22 @@ recognised, so two desks with identical monitors are told apart.
 | --- | --- |
 | ![The panel with the quick choices Mirror, Extend, External only and Laptop only](docs/quick.png) | ![The arrangement view with two monitors above a laptop and its second screen](preview.png) |
 
+## New in 0.9: ready for Omarchy 4.5
+
+Omarchy 4.5 gives every screen workspaces 1–10 of its own. Display Setups now
+leaves the workspaces to Omarchy and keeps doing what it did before: arranging
+your displays and bringing the right setup back for every dock and desk. Your
+saved profiles keep working as they are.
+
+New with it: **send a window to a specific screen.** Every bar shows its
+screen's number as a small digit on the Display Setups icon. Press
+`Super + Shift + 3` once and the window moves to workspace 3 on the same screen,
+as usual in Omarchy 4.5. Press it twice quickly and the window goes to screen 3
+instead. This needs one block in your keybindings; see
+[Omarchy 4.5](#omarchy-45-workspaces-per-screen).
+
+On Omarchy 4.0 nothing changes.
+
 ## Features
 
 - **Drag-and-drop arrangement.** A map of your displays in the bar panel.
@@ -158,8 +174,9 @@ workspaces to Omarchy:
 **Send a window to another screen.** The plugin can make `Super + Shift + 1`–`0`
 do two things. One press moves the focused window to that workspace on the same
 screen, as Omarchy does by default. Two presses within 0.4 seconds send it on
-to that screen instead, the number **Identify** shows, onto the workspace it is
-showing, and the first screen goes back to what it showed. Pressed on workspace
+to that screen instead, the number **Identify** shows and the small digit on
+the Display Setups icon in each screen's bar, onto the workspace it is showing,
+and the first screen goes back to what it showed. Pressed on workspace
 3 itself, `Super + Shift + 3` sends the window to screen 3 at once.
 
 The plugin never changes your keybindings. Add this to
@@ -176,6 +193,12 @@ end
 
 When the plugin is not running, the keys only move to the workspace, as
 Omarchy's own binding does. Remove the lines to get that binding back.
+
+The digit on the icon is shown with more than one screen. Turn it off with:
+
+```bash
+omarchy bar set io.github.gillmania.display-setups screenNumber false --json
+```
 
 ### Workspaces in the bar (Omarchy 4.0)
 
