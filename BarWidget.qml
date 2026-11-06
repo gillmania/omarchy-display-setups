@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Hyprland
 import qs.Commons
 import qs.Ui
+import "Model.js" as Model
 
 // Bar button for Display Setups, and the host for its panel.
 //
@@ -37,6 +38,21 @@ BarWidget {
     if (!service.activeProfile) return "Display Setups: this setup is not saved"
     var more = service.setupProfiles && service.setupProfiles.length > 1 ? " (scroll to switch)" : ""
     return "Display Setups: " + service.activeProfile.name + more
+      + (screenNumber > 0 ? "\nThis is screen " + screenNumber + ": press Super + Shift + a number twice to send a window to that screen" : "")
+  }
+
+  // This bar's screen number, the one Identify shows and the double press of
+  // Super + Shift + n sends windows to. Only on Omarchy 4.5 and later, where
+  // that binding exists, and only with more than one screen.
+  readonly property int screenNumber: {
+    if (!service || service.perMonitor !== true) return 0
+    var value = setting("screenNumber", true)
+    if (value === false || value === "false") return 0
+    var monitors = service.monitors || []
+    var desktops = 0
+    for (var i = 0; i < monitors.length; i++) if (Model.hasDesktop(monitors[i])) desktops++
+    var window = root.QsWindow.window
+    return desktops > 1 && window && window.screen ? Model.displayNumber(monitors, String(window.screen.name || "")) : 0
   }
 
   readonly property bool showWorkspaces: {
@@ -150,7 +166,9 @@ BarWidget {
 
     Loader {
       id: stripLoader
-      active: root.showWorkspaces
+      // Omarchy 4.5 and later number workspaces per monitor, and their own
+      // switcher shows each monitor's; this one only knows the old numbering.
+      active: root.showWorkspaces && !(root.service && root.service.perMonitor)
       visible: active
       source: Qt.resolvedUrl("WorkspaceStrip.qml")
       onLoaded: {
@@ -176,6 +194,22 @@ BarWidget {
         }
       }
       onWheelMoved: function(delta) { root.cycle(delta < 0 ? 1 : -1) }
+
+      // Small and tucked into the icon's corner, so it does not read as one
+      // more workspace number.
+      Text {
+        visible: root.screenNumber > 0
+        textFormat: Text.PlainText
+        text: String(root.screenNumber)
+        color: root.bar ? root.bar.barForeground : Color.foreground
+        font.family: button.fontFamily
+        font.pixelSize: Style.font.caption
+        font.bold: true
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.rightMargin: Style.space(1)
+        anchors.bottomMargin: Style.space(2)
+      }
     }
   }
 }

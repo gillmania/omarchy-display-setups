@@ -1613,6 +1613,105 @@ function awayWorkspaceLines(monitors, awayKeys, target, liveWorkspaces, rules) {
   return lines.concat(moves)
 }
 
+// ---- Per-monitor workspaces (Omarchy 4.5) ------------------------------------
+//
+// From Omarchy 4.5 every monitor has workspaces 1-10 of its own, kept by
+// Omarchy (default/hypr/monitor-workspaces.lua): the laptop panel 1-10, the
+// next monitor 11-20, and so on. Omarchy moves them when a monitor comes or
+// goes, so a profile only arranges the displays and sets no workspace rules,
+// which would fight it. The one thing Omarchy cannot know is a display that is
+// on but reserved for a program: its workspaces are sent to `target`, and
+// Omarchy then renumbers them into that monitor's own workspaces.
+
+// A chunk that fails, with PER_MONITOR_MARK in its message, when Omarchy keeps
+// workspaces per monitor.
+var PER_MONITOR_MARK = "DISPLAY_SETUPS_PER_MONITOR"
+var PER_MONITOR_CHECK = 'if o and o.workspaces and o.workspaces.workspace_id and o.workspaces.reconcile then error("'
+  + PER_MONITOR_MARK + '") end'
+
+function reservedWorkspaceLines(monitors, reservedKeys, target, liveWorkspaces) {
+  if (reservedKeys.length === 0 || !target) return []
+  var names = {}
+  for (var i = 0; i < (monitors || []).length; i++)
+    if (reservedKeys.indexOf(monitors[i].key) !== -1) names[monitors[i].name] = true
+  var lines = []
+  for (var w = 0; w < (liveWorkspaces || []).length; w++) {
+    var ws = liveWorkspaces[w]
+    if (ws.id >= 1 && names[ws.monitor]) lines.push(moveLine(ws.id, target))
+  }
+  lines.push("if o and o.workspaces and o.workspaces.reconcile then o.workspaces.reconcile() end")
+  return lines
+}
+
+// ---- Send window (Omarchy 4.5) ----------------------------------------------
+//
+// Lua for `hyprctl eval` that defines __display_setups_send_window(n), for a
+// keybinding in the user's own config (see the README). One press moves the
+// focused window to workspace n of the display it is on, as Omarchy's own
+// Super + Shift + n does. A second press of the same key within SEND_WINDOW_MS
+// sends it on to display n, the number Identify shows, onto the workspace that
+// display shows, and puts the first display back on the workspace it showed.
+// A press on workspace n itself goes straight to display n.
+//
+// The display list is refreshed on every probe, and the whole chunk again
+// after a config reload, which empties Hyprland's Lua state.
+
+var SEND_WINDOW_MS = 400
+
+function buildSendLua(monitors, holds) {
+  var byKey = holdsByKey(monitors, holds)
+  var names = []
+  for (var i = 0; i < (monitors || []).length; i++) {
+    var m = monitors[i]
+    var away = byKey[m.key] && byKey[m.key].state !== "on"
+    names.push(hasDesktop(m) && !m.mirror && !away && SAFE_NAME.test(m.name) ? '"' + m.name + '"' : "false")
+  }
+  return [
+    "__display_setups_displays = { " + names.join(", ") + " }",
+    "__display_setups_send_state = __display_setups_send_state or { moves = {} }",
+    "function __display_setups_send_window(n)",
+    "  local state = __display_setups_send_state",
+    "  local window = hl.get_active_window()",
+    "  local monitor = hl.get_active_monitor()",
+    "  if not window or not monitor or not (o and o.workspaces) then return end",
+    '  local address = "address:" .. window.address',
+    "  local function display()",
+    "    local name = __display_setups_displays[n]",
+    "    local target = name and hl.get_monitor(name)",
+    "    if target and target.name ~= monitor.name and not target.is_mirror then return target end",
+    "  end",
+    "  local function send(target)",
+    "    hl.dispatch(hl.dsp.window.move({ monitor = target.name, window = address }))",
+    "    hl.dispatch(hl.dsp.focus({ window = address }))",
+    "  end",
+    "  local armed = state.armed",
+    "  state.armed = nil",
+    "  if armed and armed.n == n and armed.window == window.address then",
+    "    local target = not armed.done and display()",
+    "    if target then",
+    "      if armed.previous then hl.dispatch(hl.dsp.focus({ workspace = tostring(armed.previous) })) end",
+    "      send(target)",
+    "    end",
+    "    return",
+    "  end",
+    "  local workspace = hl.get_active_workspace()",
+    "  local token = { n = n, window = window.address }",
+    "  if workspace and workspace.id == o.workspaces.workspace_id(monitor, n) then",
+    "    local target = display()",
+    "    if target then send(target) end",
+    "    token.done = true",
+    "  else",
+    "    token.previous = workspace and workspace.id > 0 and workspace.id or nil",
+    "    state.moves[n] = state.moves[n] or o.workspaces.move_window(n)",
+    "    state.moves[n]()",
+    "  end",
+    "  state.armed = token",
+    "  hl.timer(function() if state.armed == token then state.armed = nil end end, { timeout = "
+      + SEND_WINDOW_MS + ', type = "oneshot" })',
+    "end"
+  ].join("\n")
+}
+
 // ---- Applying ---------------------------------------------------------------
 
 var SAFE_NAME = /^[A-Za-z0-9._-]+$/
@@ -1642,7 +1741,10 @@ function luaNumber(value, fallback, decimals) {
 // `liveWorkspaces` and `rules` say where workspaces are now, which a profile
 // without dedicated workspaces needs to send those of a display held off or
 // reserved elsewhere. `refused` lists holds that were set aside.
-function buildApplyLua(profile, monitors, owner, holds, liveWorkspaces, rules) {
+//
+// With `perMonitor` (Omarchy 4.5) workspaces are Omarchy's: no rules are set,
+// whatever the profile says, and only a reserved display's are sent away.
+function buildApplyLua(profile, monitors, owner, holds, liveWorkspaces, rules, perMonitor) {
   var held = heldLayout(profile, monitors, holds)
   profile = held.profile
   var nameByKey = {}
@@ -1724,6 +1826,17 @@ function buildApplyLua(profile, monitors, owner, holds, liveWorkspaces, rules) {
   // the workspaces to the user's own rules, except for those of a display a
   // hold takes away. `plain` tells the caller that rules an earlier layout
   // left behind have to be cleared first.
+  if (perMonitor === true) {
+    var reservedKeys = []
+    for (var rk = 0; rk < profile.monitors.length; rk++)
+      if (profile.monitors[rk] && profile.monitors[rk].reserved === true && nameByKey[profile.monitors[rk].key])
+        reservedKeys.push(profile.monitors[rk].key)
+    var main = []
+    for (var e = 0; e < profile.monitors.length; e++)
+      if (enabledNames[profile.monitors[e].key]) main.push(profile.monitors[e])
+    var sent = reservedWorkspaceLines(monitors, reservedKeys, enabledNames[primaryKey(main)], liveWorkspaces)
+    return { lua: lines.concat(sent).join("\n"), skipped: skipped, plain: true, refused: held.refused }
+  }
   if (profile.dedicated === false) {
     var heldAway = []
     var byKey = holdsByKey(monitors, holds)
@@ -1769,7 +1882,8 @@ function buildApplyLua(profile, monitors, owner, holds, liveWorkspaces, rules) {
 // The Lua for holds alone, while no profile is applied and the user's own
 // configuration arranges the displays: only the held displays are touched.
 // Returns { lua, refused }; an empty `lua` means there is nothing to do.
-function buildHoldsLua(monitors, holds, owner, liveWorkspaces, rules) {
+// `perMonitor` as for buildApplyLua.
+function buildHoldsLua(monitors, holds, owner, liveWorkspaces, rules, perMonitor) {
   var byKey = holdsByKey(monitors, holds)
   var list = []
   for (var i = 0; i < (monitors || []).length; i++) {
@@ -1813,6 +1927,14 @@ function buildHoldsLua(monitors, holds, owner, liveWorkspaces, rules) {
   var primary = monitorByKey(desktops, primaryKey(desktops))
   var lines = ['__display_setups_owner = "' + (SAFE_NAME.test(clean(owner)) ? clean(owner) : "") + '"',
                "__display_setups_rules = __display_setups_rules or {}"]
+  var target = primary && SAFE_NAME.test(primary.name) ? primary.name : ""
+  if (perMonitor === true) {
+    var reservedKeys = []
+    for (var rk = 0; rk < awayKeys.length; rk++)
+      if (byKey[awayKeys[rk]].state === "reserved") reservedKeys.push(awayKeys[rk])
+    return { lua: lines.concat(body).concat(reservedWorkspaceLines(monitors, reservedKeys, target, liveWorkspaces)).join("\n"),
+             refused: refused }
+  }
   return {
     lua: lines.concat(body).concat(awayWorkspaceLines(monitors, awayKeys,
       primary && SAFE_NAME.test(primary.name) ? primary.name : "", liveWorkspaces, rules)).join("\n"),
@@ -1899,6 +2021,10 @@ if (typeof module !== "undefined") {
     buildApplyLua: buildApplyLua,
     buildHoldsLua: buildHoldsLua,
     buildReleaseLua: buildReleaseLua,
+    buildSendLua: buildSendLua,
+    SEND_WINDOW_MS: SEND_WINDOW_MS,
+    PER_MONITOR_MARK: PER_MONITOR_MARK,
+    PER_MONITOR_CHECK: PER_MONITOR_CHECK,
     HOLD_LIMIT: HOLD_LIMIT,
     loadHolds: loadHolds,
     holdsFile: holdsFile,

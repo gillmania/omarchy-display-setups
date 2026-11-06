@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.gillmania.display-setups",
   "name": "Display Setups",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "author": "Victor Gillholm",
   "license": "MIT",
-  "description": "Mirror, extend or arrange your displays in a click, set resolution and workspaces per screen, and get the same setup back automatically for every dock, desk and projector you plug into.",
+  "description": "Mirror, extend or arrange your displays in a click, send a window to any screen with a double press, and get the same setup back automatically for every dock, desk and projector you plug into.",
   "kinds": [
     "service",
     "bar-widget"
@@ -22,7 +22,8 @@
     "defaultSection": "right",
     "defaults": {
       "workspaces": false,
-      "openOnNewDisplay": true
+      "openOnNewDisplay": true,
+      "screenNumber": true
     },
     "schema": [
       {
@@ -34,6 +35,11 @@
         "key": "openOnNewDisplay",
         "type": "boolean",
         "label": "Open the panel when new displays are connected"
+      },
+      {
+        "key": "screenNumber",
+        "type": "boolean",
+        "label": "Show the screen number on the icon (Omarchy 4.5)"
       }
     ]
   }

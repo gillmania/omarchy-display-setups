@@ -925,3 +925,52 @@ test("a workspace is only moved onto a monitor that is already there", () => {
   assert.equal(moves.length, 10)
   for (const line of moves) assert.match(line, /for _, m in ipairs\(hl\.get_monitors\(\)\) do if m\.name == "(eDP-1|DP-1)"/)
 })
+
+// ---- Omarchy 4.5: per-monitor workspaces ----
+
+test("with per-monitor workspaces a profile sets no workspace rules", () => {
+  for (const dedicated of [true, false]) {
+    const { lua, plain } = Model.buildApplyLua(duoProfile(dedicated), duo(), "o1", [], [{ id: 1, monitor: "eDP-1" }], [], true)
+    assert.equal(plain, true, "rules an earlier layout left are cleared first")
+    assert.match(lua, /hl\.monitor\(\{ output = "eDP-1"/)
+    assert.doesNotMatch(lua, /workspace_rule|workspace\.move|__display_setups_has_rules = true/)
+  }
+})
+
+test("with per-monitor workspaces a display held off leaves its workspaces to Omarchy", () => {
+  const holds = [{ display: "desc:BOE 0x0921", state: "off", owner: "key" }]
+  const live = [{ id: 1, monitor: "eDP-1" }, { id: 11, monitor: "DP-1" }]
+  const applied = Model.buildApplyLua(duoProfile(true), duo(), "o1", holds, live, [], true).lua
+  assert.match(applied, /output = "DP-1", disabled = true/)
+  assert.doesNotMatch(applied, /workspace|reconcile/)
+  const alone = Model.buildHoldsLua(duo(), holds, "o1", live, [], true).lua
+  assert.match(alone, /output = "DP-1", disabled = true/)
+  assert.doesNotMatch(alone, /workspace|reconcile/)
+})
+
+test("with per-monitor workspaces a reserved display's workspaces go to the laptop", () => {
+  const holds = [{ display: "desc:BOE 0x0921", state: "reserved", owner: "key" }]
+  const live = [{ id: 1, monitor: "eDP-1" }, { id: 11, monitor: "DP-1" }, { id: 12, monitor: "DP-1" }]
+  for (const lua of [Model.buildApplyLua(duoProfile(false), duo(), "o1", holds, live, [], true).lua,
+                     Model.buildHoldsLua(duo(), holds, "o1", live, [], true).lua]) {
+    assert.match(lua, /workspace = 11, monitor = "eDP-1"/)
+    assert.match(lua, /workspace = 12, monitor = "eDP-1"/)
+    assert.doesNotMatch(lua, /workspace = 1, /)
+    assert.doesNotMatch(lua, /workspace_rule/)
+    assert.match(lua.split("\n").pop(), /o\.workspaces\.reconcile\(\)/)
+  }
+})
+
+test("send window numbers the displays as Identify does, leaving out those without a desktop", () => {
+  const monitors = Model.parseMonitors(hyprMonitors([LAPTOP, PAD, DELL_A, { ...DELL_B, disabled: true }]))
+  const lua = Model.buildSendLua(monitors, [])
+  assert.match(lua, /^__display_setups_displays = \{ "eDP-1", "DP-1", "DP-7", false \}$/m)
+  const reserved = Model.buildSendLua(monitors, [{ display: "desc:BOE 0x0921", state: "reserved", owner: "key" }])
+  assert.match(reserved, /^__display_setups_displays = \{ "eDP-1", false, "DP-7", false \}$/m)
+  assert.match(lua, new RegExp("timeout = " + Model.SEND_WINDOW_MS))
+})
+
+test("send window never puts an unsafe connector name into Lua", () => {
+  const monitors = Model.parseMonitors(hyprMonitors([LAPTOP, { ...DELL_A, name: 'DP-7"); os.exit() --' }]))
+  assert.match(Model.buildSendLua(monitors, []), /^__display_setups_displays = \{ "eDP-1", false \}$/m)
+})
