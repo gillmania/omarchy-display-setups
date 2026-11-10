@@ -132,9 +132,12 @@ function anyAwake(monitors) {
   return false
 }
 
-// Thunderbolt/USB4 docks expose a stable unique id. `raw` is one dock per line,
-// "id<TAB>vendor<TAB>name", as printed by the probe in Service.qml. The first
-// line that names a device is the dock; host controllers have no device name.
+// Thunderbolt/USB4 docks expose a stable unique id. `raw` is one device per
+// line, "id<TAB>vendor<TAB>name<TAB>sysfs name", as printed by the probe in
+// Service.qml. The first line that names a device is the dock. The host
+// router (sysfs name "<domain>-0") is the laptop itself, not a dock: some
+// hosts give it a name (such as "INTEL Gen12"), and its unique id can change,
+// so it is skipped.
 function parseDock(raw) {
   var lines = String(raw || "").split("\n")
   for (var i = 0; i < lines.length; i++) {
@@ -142,6 +145,7 @@ function parseDock(raw) {
     var id = clean(parts[0])
     var vendor = clean(parts[1])
     var name = clean(parts[2])
+    if (/^\d+-0$/.test(clean(parts[3]))) continue
     if (id === "" || name === "") continue
     return { id: id, name: (vendor !== "" && name.indexOf(vendor) !== 0 ? vendor + " " : "") + name }
   }

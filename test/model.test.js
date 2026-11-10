@@ -64,6 +64,13 @@ test("the dock is the first thunderbolt device with a name", () => {
   assert.equal(Model.parseDock(""), null)
 })
 
+test("a host router is never the dock, even with a name", () => {
+  const raw = "79ef\tINTEL\tGen12\t0-0\ncfcf\tINTEL\tGen12\t1-0\n"
+  assert.equal(Model.parseDock(raw), null)
+  const docked = raw + "6b2e\tAnker\tThunderbolt 4 Mini Dock\t1-1\n"
+  assert.deepEqual(Model.parseDock(docked), { id: "6b2e", name: "Anker Thunderbolt 4 Mini Dock" })
+})
+
 test("logical size follows scale and rotation", () => {
   assert.deepEqual(Model.logicalSize({ width: 1920, height: 1080, scale: 1.25, transform: 0 }), { width: 1536, height: 864 })
   assert.deepEqual(Model.logicalSize({ width: 2560, height: 1440, scale: 1, transform: 1 }), { width: 1440, height: 2560 })
