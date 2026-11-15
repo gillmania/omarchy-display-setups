@@ -717,6 +717,12 @@ Item {
 
   // A process whose exit code and output are reported together, once both are
   // in. `exited` and the end of the output stream arrive in no fixed order.
+  //
+  // Every command runs under `timeout`, which puts it in a process group of its
+  // own and ends the whole group, children included, a second before the
+  // watchdog below gives up on it. Its output passes through `head -c`, so no
+  // more than `outputLimit` bytes are ever collected; a command that writes
+  // more is cut off (pipefail reports the broken pipe) and counts as failed.
   component Runner: Process {
     id: runner
     property bool busy: false
@@ -726,6 +732,7 @@ Item {
     // A command that never returns must not block everything queued behind
     // it. It is killed and reported as failed.
     property int deadline: 10000
+    property int outputLimit: 4194304
     property Timer watchdog: Timer {
       interval: runner.deadline
       onTriggered: {
@@ -744,7 +751,8 @@ Item {
       busy = true
       collected = null
       ended = false
-      command = argv
+      command = ["timeout", "--kill-after=1s", Math.max(1, Math.floor(deadline / 1000) - 2) + "s",
+                 "bash", "-c", 'set -o pipefail; "$@" | head -c "$0"', String(outputLimit)].concat(argv)
       running = true
       watchdog.restart()
       return true
@@ -753,6 +761,8 @@ Item {
     function finish() {
       if (!busy || collected === null || !ended) return
       var output = collected
+      // Cut off at the limit: not the whole answer, so not an answer.
+      if (output.length >= outputLimit) code = -1
       watchdog.stop()
       busy = false
       done(code, output)
