@@ -395,9 +395,10 @@ rm -r "${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-display-setups"
 - Dock identity is read from Thunderbolt/USB4 (`/sys/bus/thunderbolt`). With a
   plain USB-C or HDMI connection, a setup is recognised by its displays alone.
   That only matters if two desks have the same serial-less monitors.
-- The first named Thunderbolt device counts as the dock. With another
-  Thunderbolt device attached as well, a profile saved with it and one saved
-  without it are different profiles.
+- The first named Thunderbolt device counts as the dock. The laptop's own
+  Thunderbolt controller never does. With another Thunderbolt device attached
+  as well, a profile saved with it and one saved without it are different
+  profiles.
 - A display without a serial number is recognised by make, model, and
   connector. If its connector name changes, it counts as a new setup.
 - While the screens are asleep Hyprland holds a new layout back until they
