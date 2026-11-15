@@ -223,7 +223,7 @@ Item {
     probeProc.start(["bash", "-c",
       "hyprctl -j monitors all; printf '\\n@@\\n'; hyprctl -j workspaces; printf '\\n@@\\n'; hyprctl -j workspacerules; printf '\\n@@\\n'; "
       + "for d in /sys/bus/thunderbolt/devices/*; do [[ -r $d/unique_id ]] || continue; "
-      + "printf '%s\\t%s\\t%s\\n' \"$(cat \"$d/unique_id\")\" \"$(cat \"$d/vendor_name\" 2>/dev/null)\" \"$(cat \"$d/device_name\" 2>/dev/null)\"; done; "
+      + "printf '%s\\t%s\\t%s\\t%s\\n' \"$(cat \"$d/unique_id\")\" \"$(cat \"$d/vendor_name\" 2>/dev/null)\" \"$(cat \"$d/device_name\" 2>/dev/null)\" \"${d##*/}\"; done; "
       + "printf '\\n@@\\n'; hyprctl eval \"$1\" 2>&1", "_", Model.PER_MONITOR_CHECK])
   }
 
